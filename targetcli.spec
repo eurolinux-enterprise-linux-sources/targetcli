@@ -5,7 +5,7 @@ License:        ASL 2.0
 Group:          System Environment/Libraries
 Summary:        An administration shell for storage targets
 Version:        2.1.fb46
-Release:        6%{?dist}
+Release:        7%{?dist}
 URL:            https://fedorahosted.org/targetcli-fb/
 Source:         https://fedorahosted.org/released/targetcli-fb/%{oname}-%{version}.tar.gz
 Patch0:         0001-Properly-detect-errors-when-writing-backup-files.-Cl.patch
@@ -65,6 +65,9 @@ install -m 644 targetcli.8.gz %{buildroot}%{_mandir}/man8/
 %{_mandir}/man8/targetcli.8.gz
 
 %changelog
+* Wed Aug 08 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-7
+- Respin a new release of targetcli to avoid problems with TPS tests.
+
 * Wed Jun 13 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-6
 - handle backups with block-level delete
 
