@@ -5,7 +5,7 @@ License:        ASL 2.0
 Group:          System Environment/Libraries
 Summary:        An administration shell for storage targets
 Version:        2.1.fb46
-Release:        4%{?dist}
+Release:        6%{?dist}
 URL:            https://fedorahosted.org/targetcli-fb/
 Source:         https://fedorahosted.org/released/targetcli-fb/%{oname}-%{version}.tar.gz
 Patch0:         0001-Properly-detect-errors-when-writing-backup-files.-Cl.patch
@@ -18,6 +18,8 @@ Patch6:         0007-Fix-default-max_backup_files-in-ui_command_saveconfi.patch
 Patch7:         0008-config-add-saveconfig-command-to-StorageObject-level.patch
 Patch8:         0009-Support-tcmu-hw-max-sectors.patch
 Patch9:         0010-create-add-a-way-to-set-control-string.patch
+Patch10:        0011-saveconfig-way-for-block-level-save-with-delete-comm.patch
+Patch11:        0012-saveconfig-handle-backups-with-block-level-delete.patch
 BuildArch:      noarch
 BuildRequires:  python-devel python-setuptools
 Requires:       python-rtslib >= 2.1.fb41, python-configshell, python-ethtool
@@ -41,6 +43,8 @@ users will also need to install and use fcoe-utils.
 %patch7 -p1
 %patch8 -p1
 %patch9 -p1
+%patch10 -p1
+%patch11 -p1
 
 %build
 %{__python} setup.py build
@@ -61,6 +65,12 @@ install -m 644 targetcli.8.gz %{buildroot}%{_mandir}/man8/
 %{_mandir}/man8/targetcli.8.gz
 
 %changelog
+* Wed Jun 13 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-6
+- handle backups with block-level delete
+
+* Mon Jun 04 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-5
+- saveconfig: way for block-level save with delete command
+
 * Mon Apr 23 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-4
 - Properly detect errors when writing backup files. (Closes: #80) (#81)
 - Read number of backup files to keep from file
