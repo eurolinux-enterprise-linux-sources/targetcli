@@ -1,0 +1,99 @@
+From 6349a75bd71f2f15c3acd89588321524c94676e8 Mon Sep 17 00:00:00 2001
+From: Prasanna Kumar Kalever <prasanna.kalever@redhat.com>
+Date: Fri, 15 Dec 2017 15:16:28 +0530
+Subject: [PATCH] config: defend on '/etc/target/backup' directory
+
+Currently we do not create '/etc/target/backup/' while we expect the directory
+to be presented by package (rpm).
+
+If for some reason '/etc/target/backup' is not available, say may be a
+unintentional deletion or use of targetcli which is compiled from source,
+we see below errors on up on saveconfig command,
+
+Case 1: No '/etc/target/backup/' dir
+
+$ targetcli / saveconfig
+Could not create backup file /etc/target/backup/saveconfig-20171215-15:26:48.json: No such file or directory.
+Configuration saved to /etc/target/saveconfig.json
+
+Case 2: No '/etc/target/' dir
+
+$ targetcli / saveconfig
+Could not create backup file /etc/target/backup/saveconfig-20171215-15:27:42.json: No such file or directory.
+[Errno 2] No such file or directory: '/etc/target/saveconfig.json.temp'
+
+This patch tries to create '/etc/target/backup' directory tree in case if it
+is absent.
+
+Signed-off-by: Prasanna Kumar Kalever <prasanna.kalever@redhat.com>
+---
+ targetcli/ui_root.py | 50 +++++++++++++++++++++++++++++---------------------
+ 1 file changed, 29 insertions(+), 21 deletions(-)
+
+diff --git a/targetcli/ui_root.py b/targetcli/ui_root.py
+index 8bc8521..33bb948 100644
+--- a/targetcli/ui_root.py
++++ b/targetcli/ui_root.py
+@@ -78,30 +78,38 @@ class UIRoot(UINode):
+                 datetime.now().strftime("%Y%m%d-%H:%M:%S") + ".json"
+             backupfile = backup_dir + "/" + backup_name
+             backup_error = None
+-            try:
+-                shutil.copy(savefile, backupfile)
+-            except IOError as ioe:
+-                backup_error = ioe.strerror or "Unknown error"
+ 
+-            if backup_error == None:
+-                # Kill excess backups
++            if not os.path.exists(backup_dir):
++                try:
++                    os.makedirs(backup_dir);
++                except OSError as exe:
++                    raise ExecutionError("Cannot create backup directory [%s] %s." % (backup_dir, exc.strerror))
++
++            if os.path.exists(savefile):
+                 try:
+-                    with open(universal_prefs_file) as prefs:
+-                        backups = [line for line in prefs.read().splitlines() if re.match('^kept_backups\s*=', line)]
+-                        kept_backups = int(backups[0].split('=')[1].strip())
+-                except:
+-                    kept_backups = default_kept_backups
+-
+-                backups = sorted(glob(os.path.dirname(savefile) + "/backup/*.json"))
+-                files_to_unlink = list(reversed(backups))[kept_backups:]
+-                for f in files_to_unlink:
+-                    with ignored(IOError):
+-                        os.unlink(f)
+-
+-                self.shell.log.info("Last %d configs saved in %s." % \
++                    shutil.copy(savefile, backupfile)
++                except IOError as ioe:
++                    backup_error = ioe.strerror or "Unknown error"
++
++                if backup_error == None:
++                    # Kill excess backups
++                    try:
++                        with open(universal_prefs_file) as prefs:
++                            backups = [line for line in prefs.read().splitlines() if re.match('^kept_backups\s*=', line)]
++                            kept_backups = int(backups[0].split('=')[1].strip())
++                    except:
++                        kept_backups = default_kept_backups
++
++                    backups = sorted(glob(os.path.dirname(savefile) + "/backup/*.json"))
++                    files_to_unlink = list(reversed(backups))[kept_backups:]
++                    for f in files_to_unlink:
++                        with ignored(IOError):
++                            os.unlink(f)
++
++                    self.shell.log.info("Last %d configs saved in %s." % \
+                                         (kept_backups, backup_dir))
+-            else:
+-                self.shell.log.warning("Could not create backup file %s: %s." % \
++                else:
++                    self.shell.log.warning("Could not create backup file %s: %s." % \
+                                            (backupfile, backup_error))
+ 
+         self.rtsroot.save_to_file(savefile)
+-- 
+1.8.3.1
+

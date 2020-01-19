@@ -1,0 +1,48 @@
+From bd3b2b50d741848a748830d9a1a7ee642e8d40d3 Mon Sep 17 00:00:00 2001
+From: Prasanna Kumar Kalever <prasanna.kalever@redhat.com>
+Date: Tue, 19 Dec 2017 14:32:41 +0530
+Subject: [PATCH] config: rename key 'kept_backups' as 'max_backup_files'
+
+$ cat /etc/target/targetcli.conf
+max_backup_files = 25
+
+$ targetcli / saveconfig
+Last 25 configs saved in /etc/target/backup.
+Configuration saved to /etc/target/saveconfig.json
+
+Signed-off-by: Prasanna Kumar Kalever <prasanna.kalever@redhat.com>
+---
+ targetcli/ui_root.py | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/targetcli/ui_root.py b/targetcli/ui_root.py
+index f398395..f84d33d 100644
+--- a/targetcli/ui_root.py
++++ b/targetcli/ui_root.py
+@@ -101,18 +101,18 @@ class UIRoot(UINode):
+                         # Kill excess backups
+                         try:
+                             with open(universal_prefs_file) as prefs:
+-                                backups = [line for line in prefs.read().splitlines() if re.match('^kept_backups\s*=', line)]
+-                                kept_backups = int(backups[0].split('=')[1].strip())
++                                backups = [line for line in prefs.read().splitlines() if re.match('^max_backup_files\s*=', line)]
++                                max_backup_files = int(backups[0].split('=')[1].strip())
+                         except:
+-                            kept_backups = default_kept_backups
++                            max_backup_files = default_kept_backups
+ 
+-                        files_to_unlink = list(reversed(backed_files_list))[kept_backups:]
++                        files_to_unlink = list(reversed(backed_files_list))[max_backup_files:]
+                         for f in files_to_unlink:
+                             with ignored(IOError):
+                                 os.unlink(f)
+ 
+                         self.shell.log.info("Last %d configs saved in %s." % \
+-                                            (kept_backups, backup_dir))
++                                            (max_backup_files, backup_dir))
+                     else:
+                         self.shell.log.warning("Could not create backup file %s: %s." % \
+                                                (backupfile, backup_error))
+-- 
+1.8.3.1
+

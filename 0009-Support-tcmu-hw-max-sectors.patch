@@ -1,0 +1,43 @@
+From 2f3183bf56295a764e743d0601275c7aa5a815db Mon Sep 17 00:00:00 2001
+From: Mike Christie <mchristi@redhat.com>
+Date: Wed, 29 Mar 2017 15:01:05 -0500
+Subject: [PATCH] Support tcmu hw max sectors
+
+Support hw_max_sectors setting for tcmu added in this patch:
+
+commit 3abaa2bfdb1e6bb33d38a2e82cf3bb82ec0197bf
+Author: Mike Christie <mchristi@redhat.com>
+Date:   Wed Mar 1 23:14:39 2017 -0600
+
+    tcmu: allow hw_max_sectors greater than 128
+---
+ targetcli/ui_backstore.py | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/targetcli/ui_backstore.py b/targetcli/ui_backstore.py
+index 4c577a4..88240bb 100644
+--- a/targetcli/ui_backstore.py
++++ b/targetcli/ui_backstore.py
+@@ -574,7 +574,8 @@ class UIUserBackedBackstore(UIBackstore):
+             print(x.get("ConfigDesc", "No description."))
+             print()
+ 
+-    def ui_command_create(self, name, size, cfgstring, wwn=None):
++    def ui_command_create(self, name, size, cfgstring, wwn=None,
++                          hw_max_sectors=None):
+         '''
+         Creates a User-backed storage object.
+ 
+@@ -598,7 +599,8 @@ class UIUserBackedBackstore(UIBackstore):
+         if not ok:
+             raise ExecutionError("cfgstring invalid: %s" % errmsg)
+ 
+-        so = UserBackedStorageObject(name, size=size, config=config, wwn=wwn)
++        so = UserBackedStorageObject(name, size=size, config=config, wwn=wwn,
++                                     hw_max_sectors=hw_max_sectors)
+         ui_so = UIUserBackedStorageObject(so, self)
+         self.shell.log.info("Created user-backed storage object %s size %d."
+                             % (name, size))
+-- 
+1.8.3.1
+

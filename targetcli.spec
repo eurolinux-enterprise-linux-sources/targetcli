@@ -5,9 +5,19 @@ License:        ASL 2.0
 Group:          System Environment/Libraries
 Summary:        An administration shell for storage targets
 Version:        2.1.fb46
-Release:        1%{?dist}
+Release:        4%{?dist}
 URL:            https://fedorahosted.org/targetcli-fb/
 Source:         https://fedorahosted.org/released/targetcli-fb/%{oname}-%{version}.tar.gz
+Patch0:         0001-Properly-detect-errors-when-writing-backup-files.-Cl.patch
+Patch1:         0002-Read-number-of-backup-files-to-keep-from-file.patch
+Patch2:         0003-config-defend-on-etc-target-backup-directory.patch
+Patch3:         0004-config-backup-when-current-config-is-different-from-.patch
+Patch4:         0005-config-rename-key-kept_backups-as-max_backup_files.patch
+Patch5:         0006-backup-global-option-to-tune-max-no.-of-backup-conf-.patch
+Patch6:         0007-Fix-default-max_backup_files-in-ui_command_saveconfi.patch
+Patch7:         0008-config-add-saveconfig-command-to-StorageObject-level.patch
+Patch8:         0009-Support-tcmu-hw-max-sectors.patch
+Patch9:         0010-create-add-a-way-to-set-control-string.patch
 BuildArch:      noarch
 BuildRequires:  python-devel python-setuptools
 Requires:       python-rtslib >= 2.1.fb41, python-configshell, python-ethtool
@@ -21,6 +31,16 @@ users will also need to install and use fcoe-utils.
 
 %prep
 %setup -q -n %{oname}-%{version}
+%patch0 -p1
+%patch1 -p1
+%patch2 -p1
+%patch3 -p1
+%patch4 -p1
+%patch5 -p1
+%patch6 -p1
+%patch7 -p1
+%patch8 -p1
+%patch9 -p1
 
 %build
 %{__python} setup.py build
@@ -41,6 +61,21 @@ install -m 644 targetcli.8.gz %{buildroot}%{_mandir}/man8/
 %{_mandir}/man8/targetcli.8.gz
 
 %changelog
+* Mon Apr 23 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-4
+- Properly detect errors when writing backup files. (Closes: #80) (#81)
+- Read number of backup files to keep from file
+- config: defend on '/etc/target/backup' directory
+- config: backup when current config is different from recent backup copy
+- config: rename key 'kept_backups' as 'max_backup_files'
+- backup: global option to tune max no. of backup conf files
+
+* Fri Apr 13 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-3
+- Support tcmu hw max sectors
+- create: add a way to set control string
+
+* Wed Apr 11 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-2
+- Add saveconfig command to StorageObject level
+
 * Thu Mar 2 2017 Andy Grover <agrover@redhat.com> - 2.1.fb46-1
 - New upstream version
 - Drop no-model-alias.patch

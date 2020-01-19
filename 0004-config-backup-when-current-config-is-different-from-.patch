@@ -1,0 +1,91 @@
+From 6efbd7e4c0217d1f6b46e22ec51a209439678f5a Mon Sep 17 00:00:00 2001
+From: Prasanna Kumar Kalever <prasanna.kalever@redhat.com>
+Date: Mon, 18 Dec 2017 15:25:42 +0530
+Subject: [PATCH] config: backup when current config is different from recent
+ backup copy
+
+With this change,
+when '/etc/target/saveconfig.json' is same as '/etc/target/backup/saveconfig-${latest-stamp}.json
+we skip backing up saveconfig.json
+
+Signed-off-by: Prasanna Kumar Kalever <prasanna.kalever@redhat.com>
+---
+ targetcli/ui_root.py | 53 ++++++++++++++++++++++++++++------------------------
+ 1 file changed, 29 insertions(+), 24 deletions(-)
+
+diff --git a/targetcli/ui_root.py b/targetcli/ui_root.py
+index 33bb948..f398395 100644
+--- a/targetcli/ui_root.py
++++ b/targetcli/ui_root.py
+@@ -23,6 +23,7 @@ import os
+ import re
+ import shutil
+ import stat
++import filecmp
+ 
+ from configshell_fb import ExecutionError
+ from rtslib_fb import RTSRoot
+@@ -85,32 +86,36 @@ class UIRoot(UINode):
+                 except OSError as exe:
+                     raise ExecutionError("Cannot create backup directory [%s] %s." % (backup_dir, exc.strerror))
+ 
++            # Only save backups if savefile exits
+             if os.path.exists(savefile):
+-                try:
+-                    shutil.copy(savefile, backupfile)
+-                except IOError as ioe:
+-                    backup_error = ioe.strerror or "Unknown error"
+-
+-                if backup_error == None:
+-                    # Kill excess backups
++                backed_files_list = sorted(glob(os.path.dirname(savefile) + "/backup/*.json"))
++                # Save backup if 1. backup dir is empty, or 2. savefile is differnt from recent backup copy
++                if not backed_files_list or not filecmp.cmp(backed_files_list[-1], savefile):
+                     try:
+-                        with open(universal_prefs_file) as prefs:
+-                            backups = [line for line in prefs.read().splitlines() if re.match('^kept_backups\s*=', line)]
+-                            kept_backups = int(backups[0].split('=')[1].strip())
+-                    except:
+-                        kept_backups = default_kept_backups
+-
+-                    backups = sorted(glob(os.path.dirname(savefile) + "/backup/*.json"))
+-                    files_to_unlink = list(reversed(backups))[kept_backups:]
+-                    for f in files_to_unlink:
+-                        with ignored(IOError):
+-                            os.unlink(f)
+-
+-                    self.shell.log.info("Last %d configs saved in %s." % \
+-                                        (kept_backups, backup_dir))
+-                else:
+-                    self.shell.log.warning("Could not create backup file %s: %s." % \
+-                                           (backupfile, backup_error))
++                        shutil.copy(savefile, backupfile)
++
++                    except IOError as ioe:
++                        backup_error = ioe.strerror or "Unknown error"
++
++                    if backup_error == None:
++                        # Kill excess backups
++                        try:
++                            with open(universal_prefs_file) as prefs:
++                                backups = [line for line in prefs.read().splitlines() if re.match('^kept_backups\s*=', line)]
++                                kept_backups = int(backups[0].split('=')[1].strip())
++                        except:
++                            kept_backups = default_kept_backups
++
++                        files_to_unlink = list(reversed(backed_files_list))[kept_backups:]
++                        for f in files_to_unlink:
++                            with ignored(IOError):
++                                os.unlink(f)
++
++                        self.shell.log.info("Last %d configs saved in %s." % \
++                                            (kept_backups, backup_dir))
++                    else:
++                        self.shell.log.warning("Could not create backup file %s: %s." % \
++                                               (backupfile, backup_error))
+ 
+         self.rtsroot.save_to_file(savefile)
+ 
+-- 
+1.8.3.1
+
