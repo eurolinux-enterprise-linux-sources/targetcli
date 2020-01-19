@@ -17,11 +17,14 @@ License for the specific language governing permissions and limitations
 under the License.
 '''
 
+from gi.repository import Gio
 import glob
 import os
+import fcntl
+import array
+import struct
 import re
 import stat
-import dbus
 
 from configshell_fb import ExecutionError
 from rtslib_fb import BlockStorageObject, FileIOStorageObject
@@ -32,6 +35,8 @@ from rtslib_fb import RTSRoot
 from rtslib_fb.utils import get_block_type
 
 from .ui_node import UINode, UIRTSLibNode
+
+default_save_file = "/etc/target/saveconfig.json"
 
 alua_rw_params = ['alua_access_state', 'alua_access_status',
                   'alua_write_metadata', 'alua_access_type', 'preferred',
@@ -128,7 +133,7 @@ class UIALUATargetPortGroup(UIRTSLibNode):
             self.define_config_group_param("alua", param, 'string')
 
         for param in alua_ro_params:
-            self.define_config_group_param("alua", param, 'string', False)
+            self.define_config_group_param("alua", param, 'string', writable=False)
 
     def ui_getgroup_alua(self, alua_attr):
         return getattr(self.rtsnode, alua_attr)
@@ -229,16 +234,26 @@ class UIBackstores(UINode):
         tcmu-runner (or other daemon providing the same service) exposes a
         DBus ObjectManager-based iface to find handlers it supports.
         '''
-        bus = dbus.SystemBus()
+        bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
         try:
-            mgr_obj = bus.get_object('org.kernel.TCMUService1', '/org/kernel/TCMUService1')
-            mgr_iface = dbus.Interface(mgr_obj, 'org.freedesktop.DBus.ObjectManager')
+            mgr_iface = Gio.DBusProxy.new_sync(bus,
+                                               Gio.DBusProxyFlags.NONE,
+                                               None,
+                                               'org.kernel.TCMUService1',
+                                               '/org/kernel/TCMUService1',
+                                               'org.freedesktop.DBus.ObjectManager',
+                                               None)
 
-            for k,v in mgr_iface.GetManagedObjects().items():
-                tcmu_obj = bus.get_object('org.kernel.TCMUService1', k)
-                tcmu_iface = dbus.Interface(tcmu_obj, dbus_interface='org.kernel.TCMUService1')
+            for k, v in mgr_iface.GetManagedObjects().items():
+                tcmu_iface = Gio.DBusProxy.new_sync(bus,
+                                                    Gio.DBusProxyFlags.NONE,
+                                                    None,
+                                                    'org.kernel.TCMUService1',
+                                                    k,
+                                                    'org.kernel.TCMUService1',
+                                                    None)
                 yield (k[k.rfind("/")+1:], tcmu_iface, v)
-        except dbus.DBusException as e:
+        except Exception as e:
             return
 
     def refresh(self):
@@ -269,7 +284,7 @@ class UIBackstore(UINode):
     def summary(self):
         return ("Storage Objects: %d" % len(self._children), None)
 
-    def ui_command_delete(self, name):
+    def ui_command_delete(self, name, save=None):
         '''
         Recursively deletes the storage object having the specified I{name}. If
         there are LUNs using this storage object, they will be deleted too.
@@ -286,7 +301,12 @@ class UIBackstore(UINode):
         except ValueError:
             raise ExecutionError("No storage object named %s." % name)
 
-        child.rtsnode.delete()
+        save = self.ui_eval_param(save, 'bool', False)
+        if save:
+            rn = self.get_root()
+            rn._save_backups(default_save_file)
+
+        child.rtsnode.delete(save=save)
         self.remove_child(child)
         self.shell.log.info("Deleted storage object %s." % name)
 
@@ -516,6 +536,25 @@ class UIBlockBackstore(UIBackstore):
         self.so_cls = UIBlockStorageObject
         UIBackstore.__init__(self, 'block', parent)
 
+    def _ui_block_ro_check(self, dev):
+        BLKROGET=0x0000125E
+        try:
+            f = os.open(dev, os.O_RDONLY)
+        except (OSError, IOError):
+            raise ExecutionError("Could not open %s" % dev)
+        # ioctl returns an int. Provision a buffer for it
+        buf = array.array('b', [0] * 4)
+        try:
+            fcntl.ioctl(f, BLKROGET, buf)
+        except (OSError, IOError):
+            os.close(f)
+            return False
+
+        os.close(f)
+        if struct.unpack('I', buf)[0] == 0:
+            return False
+        return True
+
     def ui_command_create(self, name, dev, readonly=None, wwn=None):
         '''
         Creates an Block Storage object. I{dev} is the path to the TYPE_DISK
@@ -523,7 +562,13 @@ class UIBlockBackstore(UIBackstore):
         '''
         self.assert_root()
 
-        readonly = self.ui_eval_param(readonly, 'bool', False)
+        ro_string = self.ui_eval_param(readonly, 'string', None)
+        if ro_string == None:
+            # attempt to detect block device readonly state via ioctl
+            readonly = self._ui_block_ro_check(dev)
+        else:
+            readonly = self.ui_eval_param(readonly, 'bool', False)
+
         wwn = self.ui_eval_param(wwn, 'string', None)
 
         so = BlockStorageObject(name, dev, readonly=readonly, wwn=wwn)
@@ -559,7 +604,7 @@ class UIUserBackedBackstore(UIBackstore):
     def refresh(self):
         self._children = set([])
         for so in RTSRoot().storage_objects:
-            if so.plugin == 'user':
+            if so.plugin == 'user' and so.config:
                 idx = so.config.find("/")
                 handler = so.config[:idx]
                 if handler == self.handler:
@@ -574,7 +619,8 @@ class UIUserBackedBackstore(UIBackstore):
             print(x.get("ConfigDesc", "No description."))
             print()
 
-    def ui_command_create(self, name, size, cfgstring, wwn=None):
+    def ui_command_create(self, name, size, cfgstring, wwn=None,
+                          hw_max_sectors=None, control=None):
         '''
         Creates a User-backed storage object.
 
@@ -594,16 +640,35 @@ class UIUserBackedBackstore(UIBackstore):
 
         config = self.handler + "/" + cfgstring
 
-        ok, errmsg = self.iface.CheckConfig(config)
+        ok, errmsg = self.iface.CheckConfig('(s)', config)
         if not ok:
             raise ExecutionError("cfgstring invalid: %s" % errmsg)
 
-        so = UserBackedStorageObject(name, size=size, config=config, wwn=wwn)
+        try:
+            so = UserBackedStorageObject(name, size=size, config=config,
+                                         wwn=wwn, hw_max_sectors=hw_max_sectors,
+                                         control=control)
+        except:
+            raise ExecutionError("UserBackedStorageObject creation failed.")
+
         ui_so = UIUserBackedStorageObject(so, self)
         self.shell.log.info("Created user-backed storage object %s size %d."
                             % (name, size))
         return self.new_node(ui_so)
 
+    def ui_command_changemedium(self, name, size, cfgstring):
+        size = human_to_bytes(size)
+        config = self.handler + "/" + cfgstring
+
+        try:
+            rc, errmsg = self.iface.ChangeMedium('(sts)', name, size, config)
+        except Exception as e:
+            raise ExecutionError("ChangeMedium failed: %s" % e)
+        else:
+            if rc == 0:
+                self.shell.log.info("Medium Changed.")
+            else:
+                raise ExecutionError("ChangeMedium failed: %s" % errmsg)
 
 class UIStorageObject(UIRTSLibNode):
     '''
@@ -629,6 +694,7 @@ class UIStorageObject(UIRTSLibNode):
         'fabric_max_sectors': ('number', 'Maximum number of sectors the fabric can transfer at once.'),
         'hw_block_size': ('number', 'Hardware block size in bytes.'),
         'hw_max_sectors': ('number', 'Maximum number of sectors the hardware can transfer at once.'),
+        'control': ('string', 'Comma separated string of control=value tuples that will be passed to kernel control file.'),
         'hw_pi_prot_type': ('number', 'If non-zero, DIF protection is enabled on the underlying hardware.'),
         'hw_queue_depth': ('number', 'Hardware queue depth.'),
         'is_nonrot': ('number', 'If set to 1, the backstore is a non rotational device.'),
@@ -657,6 +723,26 @@ class UIStorageObject(UIRTSLibNode):
         '''
         self.shell.con.display("Backstore plugin %s %s"
                                % (self.rtsnode.plugin, self.rtsnode.version))
+
+    def ui_command_saveconfig(self, savefile=None):
+        '''
+        Save configuration of this StorageObject.
+        '''
+        so = self.rtsnode
+        rn = self.get_root()
+
+        if not savefile:
+            savefile = default_save_file
+
+        savefile = os.path.expanduser(savefile)
+
+        rn._save_backups(savefile)
+
+        rn.rtsroot.save_to_file(savefile,
+                                '/backstores/' + so.plugin  + '/' + so.name)
+
+        self.shell.log.info("Storage Object '%s:%s' config saved to %s."
+                            % (so.plugin, so.name, savefile))
 
 
 class UIPSCSIStorageObject(UIStorageObject):

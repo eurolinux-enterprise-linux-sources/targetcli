@@ -4,22 +4,10 @@ Name:           targetcli
 License:        ASL 2.0
 Group:          System Environment/Libraries
 Summary:        An administration shell for storage targets
-Version:        2.1.fb46
-Release:        7%{?dist}
+Version:        2.1.fb49
+Release:        1%{?dist}
 URL:            https://fedorahosted.org/targetcli-fb/
 Source:         https://fedorahosted.org/released/targetcli-fb/%{oname}-%{version}.tar.gz
-Patch0:         0001-Properly-detect-errors-when-writing-backup-files.-Cl.patch
-Patch1:         0002-Read-number-of-backup-files-to-keep-from-file.patch
-Patch2:         0003-config-defend-on-etc-target-backup-directory.patch
-Patch3:         0004-config-backup-when-current-config-is-different-from-.patch
-Patch4:         0005-config-rename-key-kept_backups-as-max_backup_files.patch
-Patch5:         0006-backup-global-option-to-tune-max-no.-of-backup-conf-.patch
-Patch6:         0007-Fix-default-max_backup_files-in-ui_command_saveconfi.patch
-Patch7:         0008-config-add-saveconfig-command-to-StorageObject-level.patch
-Patch8:         0009-Support-tcmu-hw-max-sectors.patch
-Patch9:         0010-create-add-a-way-to-set-control-string.patch
-Patch10:        0011-saveconfig-way-for-block-level-save-with-delete-comm.patch
-Patch11:        0012-saveconfig-handle-backups-with-block-level-delete.patch
 BuildArch:      noarch
 BuildRequires:  python-devel python-setuptools
 Requires:       python-rtslib >= 2.1.fb41, python-configshell, python-ethtool
@@ -33,18 +21,6 @@ users will also need to install and use fcoe-utils.
 
 %prep
 %setup -q -n %{oname}-%{version}
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-%patch7 -p1
-%patch8 -p1
-%patch9 -p1
-%patch10 -p1
-%patch11 -p1
 
 %build
 %{__python} setup.py build
@@ -65,6 +41,9 @@ install -m 644 targetcli.8.gz %{buildroot}%{_mandir}/man8/
 %{_mandir}/man8/targetcli.8.gz
 
 %changelog
+* Tue Jan 29 2019 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb49-1
+- Rebase to latest upstream version
+
 * Wed Aug 08 2018 Maurizio Lombardi <mlombard@redhat.com> - 2.1.fb46-7
 - Respin a new release of targetcli to avoid problems with TPS tests.
 
